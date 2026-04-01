@@ -84,58 +84,93 @@ export default async function handler(req, res) {
     </div>
 
     <script>
-        const tg = window.Telegram.WebApp;
-        tg.ready();
-        tg.expand();
-
-        const user = tg.initDataUnsafe?.user;
-        let userId = null;
-        let userName = '';
-        if (user && user.id) {
-            userId = user.id;
-            userName = user.first_name + (user.last_name ? ' ' + user.last_name : '');
-            if (user.username) userName += \` (@\${user.username})\`;
-        } else {
-            userId = 'unknown';
-            userName = 'Гость (вне Telegram)';
+        // Функция инициализации, запускается после загрузки страницы и SDK
+        function init() {
+            let tg;
+            // Проверяем, загрузился ли Telegram WebApp
+            if (window.Telegram && window.Telegram.WebApp) {
+                tg = window.Telegram.WebApp;
+                tg.ready();
+                tg.expand();
+            } else {
+                // Если нет, пробуем подождать ещё (например, скрипт ещё не загрузился)
+                setTimeout(() => {
+                    if (window.Telegram && window.Telegram.WebApp) {
+                        tg = window.Telegram.WebApp;
+                        tg.ready();
+                        tg.expand();
+                    } else {
+                        console.warn('Telegram WebApp SDK не загружен. Работаем без интеграции.');
+                    }
+                    startGame(tg);
+                }, 500);
+                return;
+            }
+            startGame(tg);
         }
 
-        const clickBtn = document.getElementById('clickBtn');
-        const scoreSpan = document.getElementById('score');
-        let score = 0;
+        function startGame(tg) {
+            const user = tg && tg.initDataUnsafe?.user;
+            let userId = null;
+            let userName = '';
+            if (user && user.id) {
+                userId = user.id;
+                userName = user.first_name + (user.last_name ? ' ' + user.last_name : '');
+                if (user.username) userName += \` (@\${user.username})\`;
+            } else {
+                userId = 'unknown';
+                userName = 'Гость (вне Telegram)';
+            }
 
-        async function sendUserData(clickCount = null) {
-            const payload = {
-                user_id: userId,
-                user_name: userName,
-                timestamp: new Date().toISOString(),
-                action: 'click',
-                score: clickCount !== null ? clickCount : score
-            };
-            try {
-                await fetch('/api/user', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-            } catch (err) {
-                console.error(err);
+            const clickBtn = document.getElementById('clickBtn');
+            const scoreSpan = document.getElementById('score');
+            let score = 0;
+
+            async function sendUserData(clickCount = null) {
+                const payload = {
+                    user_id: userId,
+                    user_name: userName,
+                    timestamp: new Date().toISOString(),
+                    action: 'click',
+                    score: clickCount !== null ? clickCount : score
+                };
+                try {
+                    await fetch('/api/user', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                } catch (err) {
+                    console.error(err);
+                }
+            }
+
+            // Отправляем при загрузке
+            sendUserData(0);
+
+            // Обработчик клика
+            clickBtn.addEventListener('click', () => {
+                score++;
+                scoreSpan.textContent = score;
+                if (tg && tg.HapticFeedback) {
+                    tg.HapticFeedback.impactOccurred('light');
+                }
+                sendUserData(score);
+            });
+
+            // Кнопка закрытия (если доступна)
+            if (tg && tg.MainButton) {
+                tg.MainButton.setText('Закрыть');
+                tg.MainButton.show();
+                tg.MainButton.onClick(() => tg.close());
             }
         }
 
-        sendUserData(0);
-
-        clickBtn.addEventListener('click', () => {
-            score++;
-            scoreSpan.textContent = score;
-            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
-            sendUserData(score);
-        });
-
-        if (tg.MainButton) {
-            tg.MainButton.setText('Закрыть');
-            tg.MainButton.show();
-            tg.MainButton.onClick(() => tg.close());
+        // Запускаем инициализацию после полной загрузки DOM
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
         }
     </script>
 </body>
