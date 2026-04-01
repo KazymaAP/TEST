@@ -1,4 +1,4 @@
-// index.js – единственный файл проекта
+// api/index.js — единственный файл проекта
 export default async function handler(req, res) {
   const url = req.url;
   const method = req.method;
